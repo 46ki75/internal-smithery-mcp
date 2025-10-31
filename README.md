@@ -1,5 +1,7 @@
 # template-devcontainer
 
+[![smithery badge](https://smithery.ai/badge/@46ki75/internal-smithery-mcp)](https://smithery.ai/server/@46ki75/internal-smithery-mcp)
+
 ```bash
 npx degit 46ki75/template-devcontainer
 ```
