@@ -53,8 +53,6 @@ async fn main() {
 
     let router: axum::Router = axum::Router::new().nest_service("/mcp", service);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:12000")
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8081").await.unwrap();
     axum::serve(listener, router).await.unwrap();
 }
