@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct Input {
-    pub url: String,
+    pub urls: Vec<String>,
 }
 
 struct FlexibleWaiter<'a> {
@@ -82,7 +82,30 @@ impl<'a> FlexibleWaiter<'a> {
 static BROWSER: tokio::sync::OnceCell<std::sync::Arc<headless_chrome::Browser>> =
     tokio::sync::OnceCell::const_new();
 
-pub async fn fetch(url: &str) -> Result<String, Box<dyn std::error::Error + Send>> {
+fn fetch_with_browser(
+    browser: &std::sync::Arc<headless_chrome::Browser>,
+    url: String,
+) -> Result<String, Box<dyn std::error::Error + Send>> {
+    let tab = browser.new_tab()?;
+
+    tab.navigate_to(&url)?;
+
+    FlexibleWaiter::new(&tab)
+        .with_timeout(Duration::from_secs(15))
+        .wait_smart()?;
+
+    let elem = tab.wait_for_element("body")?;
+
+    let html = elem.get_content()?;
+
+    let markdown = html2md::rewrite_html(&html, false);
+
+    let _ = tab.close(false);
+
+    Ok(format!("<{url}>\n\n{markdown}"))
+}
+
+pub async fn fetch(urls: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error + Send>> {
     let maybe_browser: Result<
         &std::sync::Arc<headless_chrome::Browser>,
         Box<dyn std::error::Error + Send>,
@@ -111,21 +134,23 @@ pub async fn fetch(url: &str) -> Result<String, Box<dyn std::error::Error + Send
 
     let browser = maybe_browser?;
 
-    let tab = browser.new_tab()?;
+    let tasks: Vec<_> = urls
+        .into_iter()
+        .map(|url| {
+            let browser = browser.clone();
+            tokio::task::spawn_blocking(move || fetch_with_browser(&browser, url))
+        })
+        .collect();
 
-    tab.navigate_to(url)?;
+    let results = futures::future::join_all(tasks)
+        .await
+        .into_iter()
+        .map(|result| match result {
+            Ok(Ok(markdown)) => markdown,
+            Ok(Err(e)) => e.to_string(),
+            Err(e) => e.to_string(),
+        })
+        .collect();
 
-    FlexibleWaiter::new(&tab)
-        .with_timeout(Duration::from_secs(15))
-        .wait_smart()?;
-
-    let _ = tab.close(false);
-
-    let elem = tab.wait_for_element("body")?;
-
-    let html = elem.get_content()?;
-
-    let markdown = html2md::rewrite_html(&html, false);
-
-    Ok(markdown)
+    Ok(results)
 }

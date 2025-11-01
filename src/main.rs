@@ -27,13 +27,16 @@ impl Counter {
     #[rmcp::tool]
     async fn fetch(
         &self,
-        Parameters(tool::fetch::Input { url }): Parameters<tool::fetch::Input>,
+        Parameters(tool::fetch::Input { urls }): Parameters<tool::fetch::Input>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let result = tool::fetch::fetch(&url).await;
+        let result = tool::fetch::fetch(urls).await;
 
         match result {
-            Ok(markdown) => {
-                let results = vec![Content::text(markdown)];
+            Ok(markdown_list) => {
+                let results = markdown_list
+                    .into_iter()
+                    .map(|markdown| Content::text(markdown))
+                    .collect::<Vec<Content>>();
                 Ok(rmcp::model::CallToolResult::success(results))
             }
             Err(e) => {

@@ -907,6 +907,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "fast_html2md",
+ "futures",
  "headless_chrome",
  "rmcp",
  "schemars",
