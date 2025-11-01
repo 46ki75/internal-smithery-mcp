@@ -1,5 +1,6 @@
 pub mod tool;
 
+use axum::response::IntoResponse;
 use rmcp::{
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Content},
@@ -103,10 +104,7 @@ impl rmcp::ServerHandler for Counter {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let _ = dotenvy::dotenv();
-
+async fn handle_request(request: axum::http::Request<axum::body::Body>) -> impl IntoResponse {
     let service = StreamableHttpService::new(
         || Ok(crate::Counter::new()),
         std::sync::Arc::new(LocalSessionManager::default()),
@@ -115,8 +113,17 @@ async fn main() {
             ..Default::default()
         },
     );
+    let response = service.handle(request).await;
 
-    let router: axum::Router = axum::Router::new().nest_service("/mcp", service);
+    response
+}
+
+#[tokio::main]
+async fn main() {
+    let _ = dotenvy::dotenv();
+
+    let router: axum::Router =
+        axum::Router::new().route("/mcp", axum::routing::post(handle_request));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081").await.unwrap();
     axum::serve(listener, router).await.unwrap();
