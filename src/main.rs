@@ -51,7 +51,7 @@ impl Counter {
 impl rmcp::ServerHandler for Counter {
     fn get_info(&self) -> rmcp::model::ServerInfo {
         rmcp::model::ServerInfo {
-            instructions: Some("A simple calculator".into()),
+            instructions: Some("set of utilities".into()),
             capabilities: rmcp::model::ServerCapabilities::builder()
                 .enable_tools()
                 .build(),
