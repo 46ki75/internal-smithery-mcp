@@ -5,11 +5,17 @@ use serde::{Deserialize, Serialize};
 pub struct Input {
     /// The natural language query to search for.
     pub query: String,
+
+    /// If specified, results will only come from these domains.
+    /// e.g., `["example.como"]`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_domains: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct Request {
     pub query: String,
+    pub include_domains: Option<Vec<String>>,
     pub num_results: u8,
     pub contents: Contents,
 }
@@ -33,13 +39,17 @@ pub struct SearchResult {
     pub summary: String,
 }
 
-pub async fn search(query: String) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
+pub async fn search(
+    query: String,
+    include_domains: Option<Vec<String>>,
+) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
     let api_key = std::env::var("EXA_API_KEY")?;
 
     let client = reqwest::Client::new();
 
     let body = Request {
         query,
+        include_domains,
         num_results: 3,
         contents: Contents {
             summary: true,

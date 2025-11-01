@@ -51,9 +51,12 @@ impl Counter {
     #[rmcp::tool]
     async fn search(
         &self,
-        Parameters(tool::search::Input { query }): Parameters<tool::search::Input>,
+        Parameters(tool::search::Input {
+            query,
+            include_domains,
+        }): Parameters<tool::search::Input>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let response = crate::tool::search::search(query).await;
+        let response = crate::tool::search::search(query, include_domains).await;
 
         match response {
             Ok(search_results) => {
