@@ -6,7 +6,8 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct Input {
-    pub url: String,
+    /// A list of URLs to fetch.
+    pub urls: Vec<String>,
 }
 
 struct FlexibleWaiter<'a> {
@@ -69,7 +70,7 @@ impl<'a> FlexibleWaiter<'a> {
                 return Ok(());
             }
 
-            std::thread::sleep(Duration::from_millis(300));
+            std::thread::sleep(Duration::from_millis(50));
         }
 
         Err(Box::new(std::io::Error::new(
@@ -79,27 +80,16 @@ impl<'a> FlexibleWaiter<'a> {
     }
 }
 
-pub async fn fetch(url: &str) -> Result<String, Box<dyn std::error::Error + Send>> {
-    let browser = headless_chrome::Browser::new(headless_chrome::LaunchOptions {
-        headless: true,
-        sandbox: false,
-        devtools: false,
-        enable_gpu: false,
-        enable_logging: false,
-        path: Some(PathBuf::from("/bin/chrome-headless-shell")),
-        args: vec![
-            &std::ffi::OsString::from("--disable-setuid-sandbox"),
-            &std::ffi::OsString::from("--disable-dev-shm-usage"),
-            &std::ffi::OsString::from("--disable-software-rasterizer"),
-            &std::ffi::OsString::from("--single-process"),
-            &std::ffi::OsString::from("--no-zygote"),
-        ],
-        ..Default::default()
-    })?;
+static BROWSER: tokio::sync::OnceCell<std::sync::Arc<headless_chrome::Browser>> =
+    tokio::sync::OnceCell::const_new();
 
+fn fetch_with_browser(
+    browser: &std::sync::Arc<headless_chrome::Browser>,
+    url: String,
+) -> Result<String, Box<dyn std::error::Error + Send>> {
     let tab = browser.new_tab()?;
 
-    tab.navigate_to(url)?;
+    tab.navigate_to(&url)?;
 
     FlexibleWaiter::new(&tab)
         .with_timeout(Duration::from_secs(15))
@@ -111,5 +101,57 @@ pub async fn fetch(url: &str) -> Result<String, Box<dyn std::error::Error + Send
 
     let markdown = html2md::rewrite_html(&html, false);
 
-    Ok(markdown)
+    let _ = tab.close(false);
+
+    Ok(format!("<{url}>\n\n{markdown}"))
+}
+
+pub async fn fetch(urls: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error + Send>> {
+    let maybe_browser: Result<
+        &std::sync::Arc<headless_chrome::Browser>,
+        Box<dyn std::error::Error + Send>,
+    > = BROWSER
+        .get_or_try_init(|| async {
+            let browser = headless_chrome::Browser::new(headless_chrome::LaunchOptions {
+                headless: true,
+                sandbox: false,
+                devtools: false,
+                enable_gpu: false,
+                enable_logging: false,
+                path: Some(PathBuf::from("/bin/chrome-headless-shell")),
+                args: vec![
+                    &std::ffi::OsString::from("--disable-setuid-sandbox"),
+                    &std::ffi::OsString::from("--disable-dev-shm-usage"),
+                    &std::ffi::OsString::from("--disable-software-rasterizer"),
+                    &std::ffi::OsString::from("--single-process"),
+                    &std::ffi::OsString::from("--no-zygote"),
+                ],
+                ..Default::default()
+            })?;
+
+            Ok(std::sync::Arc::new(browser))
+        })
+        .await;
+
+    let browser = maybe_browser?;
+
+    let tasks: Vec<_> = urls
+        .into_iter()
+        .map(|url| {
+            let browser = browser.clone();
+            tokio::task::spawn_blocking(move || fetch_with_browser(&browser, url))
+        })
+        .collect();
+
+    let results = futures::future::join_all(tasks)
+        .await
+        .into_iter()
+        .map(|result| match result {
+            Ok(Ok(markdown)) => markdown,
+            Ok(Err(e)) => e.to_string(),
+            Err(e) => e.to_string(),
+        })
+        .collect();
+
+    Ok(results)
 }

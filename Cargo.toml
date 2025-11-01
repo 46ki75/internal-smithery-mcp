@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 axum = "0.8.6"
 fast_html2md = "0.0.48"
+futures = "0.3.31"
 headless_chrome = "1.0.18"
 rmcp = { version = "0.8.3", features = [
     "transport-io",
