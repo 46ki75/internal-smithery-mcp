@@ -40,11 +40,10 @@ pub struct SearchResult {
 }
 
 pub async fn search(
+    exa_api_key: String,
     query: String,
     include_domains: Option<Vec<String>>,
 ) -> Result<Vec<SearchResult>, Box<dyn std::error::Error>> {
-    let api_key = std::env::var("EXA_API_KEY")?;
-
     let client = reqwest::Client::new();
 
     let body = Request {
@@ -61,7 +60,7 @@ pub async fn search(
 
     let request = client
         .post("https://api.exa.ai/search")
-        .header("x-api-key", api_key)
+        .header("x-api-key", exa_api_key)
         .header("content-type", "application/json")
         .body(body_string);
 

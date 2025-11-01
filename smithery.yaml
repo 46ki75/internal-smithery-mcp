@@ -4,3 +4,13 @@ build:
   dockerBuildPath: "."
 startCommand:
   type: "http"
+  configSchema:
+    type: "object"
+    required: ["exa_api_key"]
+    properties:
+      apiKey:
+        type: "string"
+        title: "exa_api_key"
+        description: "Exa API Key"
+  exampleConfig:
+    apiKey: "exa_api_key"
