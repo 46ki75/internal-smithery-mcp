@@ -8,7 +8,7 @@ startCommand:
     type: "object"
     required: ["exa_api_key"]
     properties:
-      apiKey:
+      exa_api_key:
         type: "string"
         title: "exa_api_key"
         description: "Exa API Key"
