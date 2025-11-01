@@ -1,5 +1,6 @@
 pub mod tool;
 
+use axum::response::IntoResponse;
 use rmcp::{
     handler::server::wrapper::Parameters,
     model::{CallToolResult, Content},
@@ -12,16 +13,11 @@ use rmcp::{
 #[derive(Debug, Clone)]
 pub struct Counter {
     tool_router: rmcp::handler::server::tool::ToolRouter<Self>,
+    exa_api_key: String,
 }
 
 #[rmcp::tool_router]
 impl Counter {
-    fn new() -> Self {
-        Self {
-            tool_router: Self::tool_router(),
-        }
-    }
-
     /// Fetches a URL from the internet and extracts its contents as markdown.
     /// This is the highly recommended way to fetch pages.
     #[rmcp::tool]
@@ -56,7 +52,8 @@ impl Counter {
             include_domains,
         }): Parameters<tool::search::Input>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let response = crate::tool::search::search(query, include_domains).await;
+        let response =
+            crate::tool::search::search(self.exa_api_key.clone(), query, include_domains).await;
 
         match response {
             Ok(search_results) => {
@@ -103,12 +100,23 @@ impl rmcp::ServerHandler for Counter {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let _ = dotenvy::dotenv();
+#[derive(serde::Deserialize)]
+pub struct QueryParams {
+    pub exa_api_key: String,
+}
+
+async fn handle_request(request: axum::http::Request<axum::body::Body>) -> impl IntoResponse {
+    let query_params_raw = request.uri().query().unwrap();
+
+    let query_params = serde_qs::from_str::<QueryParams>(query_params_raw).unwrap();
 
     let service = StreamableHttpService::new(
-        || Ok(crate::Counter::new()),
+        move || {
+            Ok(Counter {
+                tool_router: Counter::tool_router(),
+                exa_api_key: query_params.exa_api_key.clone(),
+            })
+        },
         std::sync::Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig {
             stateful_mode: false,
@@ -116,7 +124,15 @@ async fn main() {
         },
     );
 
-    let router: axum::Router = axum::Router::new().nest_service("/mcp", service);
+    let response = service.handle(request).await;
+
+    response
+}
+
+#[tokio::main]
+async fn main() {
+    let router: axum::Router =
+        axum::Router::new().route("/mcp", axum::routing::post(handle_request));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8081").await.unwrap();
     axum::serve(listener, router).await.unwrap();
