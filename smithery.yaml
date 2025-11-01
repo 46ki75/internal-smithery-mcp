@@ -13,4 +13,4 @@ startCommand:
         title: "exa_api_key"
         description: "Exa API Key"
   exampleConfig:
-    apiKey: "exa_api_key"
+    exa_api_key: "my_exa_api_key"
