@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct Input {
+    /// The natural language query to search for.
     pub query: String,
 }
 

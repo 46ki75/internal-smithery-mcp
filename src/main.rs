@@ -46,6 +46,8 @@ impl Counter {
         }
     }
 
+    /// Searches the web using a natural language query.
+    /// This method is highly recommended for finding web pages with greater accuracy.
     #[rmcp::tool]
     async fn search(
         &self,
