@@ -1,4 +1,7 @@
+pub mod tool;
+
 use rmcp::{
+    handler::server::wrapper::Parameters,
     model::{CallToolResult, Content},
     transport::{
         StreamableHttpServerConfig, StreamableHttpService,
@@ -19,11 +22,25 @@ impl Counter {
         }
     }
 
-    #[rmcp::tool(description = "greeting")]
-    async fn greet(&self) -> Result<CallToolResult, rmcp::ErrorData> {
-        Ok(rmcp::model::CallToolResult::success(vec![Content::text(
-            "Hello.".to_string(),
-        )]))
+    /// Fetches a URL from the internet and extracts its contents as markdown.
+    /// This is the highly recommended way to fetch pages.
+    #[rmcp::tool]
+    async fn fetch(
+        &self,
+        Parameters(tool::fetch::Input { url }): Parameters<tool::fetch::Input>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let result = tool::fetch::fetch(&url).await;
+
+        match result {
+            Ok(markdown) => {
+                let results = vec![Content::text(markdown)];
+                Ok(rmcp::model::CallToolResult::success(results))
+            }
+            Err(e) => {
+                let errors = vec![Content::text(e.to_string())];
+                Ok(rmcp::model::CallToolResult::error(errors))
+            }
+        }
     }
 }
 
