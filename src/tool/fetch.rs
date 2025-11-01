@@ -119,6 +119,8 @@ pub async fn fetch(url: &str) -> Result<String, Box<dyn std::error::Error + Send
         .with_timeout(Duration::from_secs(15))
         .wait_smart()?;
 
+    let _ = tab.close(false);
+
     let elem = tab.wait_for_element("body")?;
 
     let html = elem.get_content()?;
