@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 pub struct Input {
+    /// A list of URLs to fetch.
     pub urls: Vec<String>,
 }
 
