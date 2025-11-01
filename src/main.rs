@@ -100,15 +100,15 @@ impl rmcp::ServerHandler for Counter {
     }
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Default, serde::Deserialize)]
 pub struct QueryParams {
     pub exa_api_key: String,
 }
 
 async fn handle_request(request: axum::http::Request<axum::body::Body>) -> impl IntoResponse {
-    let query_params_raw = request.uri().query().unwrap();
+    let query_params_raw = request.uri().query().unwrap_or_default();
 
-    let query_params = serde_qs::from_str::<QueryParams>(query_params_raw).unwrap();
+    let query_params = serde_qs::from_str::<QueryParams>(query_params_raw).unwrap_or_default();
 
     let service = StreamableHttpService::new(
         move || {
