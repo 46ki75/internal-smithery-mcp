@@ -45,6 +45,33 @@ impl Counter {
             }
         }
     }
+
+    #[rmcp::tool]
+    async fn search(
+        &self,
+        Parameters(tool::search::Input { query }): Parameters<tool::search::Input>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let response = crate::tool::search::search(query).await;
+
+        match response {
+            Ok(search_results) => {
+                let mut results = vec![];
+
+                for search_result in search_results {
+                    let content = serde_json::to_string(&search_result)
+                        .map_err(|e| rmcp::ErrorData::internal_error(e.to_string(), None))?;
+
+                    results.push(Content::text(content));
+                }
+
+                Ok(rmcp::model::CallToolResult::success(results))
+            }
+            Err(e) => {
+                let errors = vec![Content::text(e.to_string())];
+                Ok(rmcp::model::CallToolResult::error(errors))
+            }
+        }
+    }
 }
 
 #[rmcp::tool_handler]
@@ -73,6 +100,8 @@ impl rmcp::ServerHandler for Counter {
 
 #[tokio::main]
 async fn main() {
+    let _ = dotenvy::dotenv();
+
     let service = StreamableHttpService::new(
         || Ok(crate::Counter::new()),
         std::sync::Arc::new(LocalSessionManager::default()),
