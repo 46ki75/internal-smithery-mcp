@@ -55,6 +55,17 @@ impl rmcp::ServerHandler for Counter {
             capabilities: rmcp::model::ServerCapabilities::builder()
                 .enable_tools()
                 .build(),
+            server_info: rmcp::model::Implementation {
+                name: "internal-smithery-mcp".to_owned(),
+                title: Some("Internal Smithery MCP".to_owned()),
+                version: "0.1.0".to_owned(),
+                icons: Some(vec![rmcp::model::Icon {
+                    src: "https://www.ikuma.cloud/brand/favicon.svg".to_owned(),
+                    mime_type: Some("image/svg+xml".to_owned()),
+                    sizes: None,
+                }]),
+                website_url: None,
+            },
             ..Default::default()
         }
     }
