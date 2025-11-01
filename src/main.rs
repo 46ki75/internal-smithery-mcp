@@ -20,7 +20,13 @@ pub struct Counter {
 impl Counter {
     /// Fetches a URL from the internet and extracts its contents as markdown.
     /// This is the highly recommended way to fetch pages.
-    #[rmcp::tool]
+    #[rmcp::tool(annotations(
+        title = "Fetch web pages.",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = true
+    ))]
     async fn fetch(
         &self,
         Parameters(tool::fetch::Input { urls }): Parameters<tool::fetch::Input>,
@@ -44,7 +50,13 @@ impl Counter {
 
     /// Searches the web using a natural language query.
     /// This method is highly recommended for finding web pages with greater accuracy.
-    #[rmcp::tool]
+    #[rmcp::tool(annotations(
+        title = "Search web pages.",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = true
+    ))]
     async fn search(
         &self,
         Parameters(tool::search::Input {
