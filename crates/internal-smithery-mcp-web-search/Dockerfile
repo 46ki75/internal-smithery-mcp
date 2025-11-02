@@ -10,4 +10,4 @@ RUN apt-get update -y && \
 COPY . .
 RUN cargo build --release
 EXPOSE 8081
-ENTRYPOINT [ "/app/target/release/internal-smithery-mcp" ]
+ENTRYPOINT [ "/app/target/release/internal-smithery-mcp-web-search" ]
