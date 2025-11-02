@@ -10,6 +10,16 @@ pub struct Input {
     pub urls: Vec<String>,
 }
 
+/// Minimum content length threshold to consider content sufficient
+const MIN_CONTENT_LENGTH: usize = 300;
+
+/// Process HTML to markdown and validate content sufficiency
+fn process_html(html: &str) -> (String, bool) {
+    let markdown = html2md::rewrite_html(html, false);
+    let is_sufficient = markdown.trim().len() >= MIN_CONTENT_LENGTH;
+    (markdown, is_sufficient)
+}
+
 struct FlexibleWaiter<'a> {
     tab: &'a Tab,
     timeout: Duration,
@@ -80,13 +90,51 @@ impl<'a> FlexibleWaiter<'a> {
     }
 }
 
+async fn fetch_with_reqwest(url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .build()
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    let html = response
+        .text()
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+    let (markdown, is_sufficient) = process_html(&html);
+
+    if is_sufficient {
+        tracing::info!("Successfully fetched with reqwest: {}", url);
+        Ok(format!("<{url}>\n\n{markdown}"))
+    } else {
+        tracing::warn!(
+            "Content insufficient with reqwest (length: {}), will retry with browser: {}",
+            markdown.len(),
+            url
+        );
+        Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Content insufficient",
+        )))
+    }
+}
+
 fn fetch_with_browser(
     browser: &headless_chrome::Browser,
-    url: String,
+    url: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send>> {
+    tracing::info!("Fetching with browser: {}", url);
+
     let tab = browser.new_tab()?;
 
-    tab.navigate_to(&url)?;
+    tab.navigate_to(url)?;
 
     FlexibleWaiter::new(&tab)
         .with_timeout(Duration::from_secs(15))
@@ -96,7 +144,7 @@ fn fetch_with_browser(
 
     let html = elem.get_content()?;
 
-    let markdown = html2md::rewrite_html(&html, false);
+    let (markdown, _is_sufficient) = process_html(&html);
 
     let _ = tab.close(false);
 
@@ -104,40 +152,75 @@ fn fetch_with_browser(
 }
 
 pub async fn fetch(urls: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error + Send>> {
-    let browser = headless_chrome::Browser::new(headless_chrome::LaunchOptions {
-        headless: true,
-        sandbox: false,
-        devtools: false,
-        enable_gpu: false,
-        enable_logging: false,
-        path: Some(PathBuf::from("/bin/chrome-headless-shell")),
-        args: vec![
-            &std::ffi::OsString::from("--disable-setuid-sandbox"),
-            &std::ffi::OsString::from("--disable-dev-shm-usage"),
-            &std::ffi::OsString::from("--disable-software-rasterizer"),
-            &std::ffi::OsString::from("--single-process"),
-            &std::ffi::OsString::from("--no-zygote"),
-        ],
-        ..Default::default()
-    })?;
+    // Process each URL sequentially to handle browser initialization properly
+    let mut results = Vec::with_capacity(urls.len());
+    let mut browser: Option<headless_chrome::Browser> = None;
 
-    let tasks: Vec<_> = urls
-        .into_iter()
-        .map(|url| {
-            let browser = browser.clone();
-            tokio::task::spawn_blocking(move || fetch_with_browser(&browser, url))
-        })
-        .collect();
+    for url in urls {
+        // Try reqwest first
+        match fetch_with_reqwest(&url).await {
+            Ok(content) => {
+                results.push(content);
+                continue;
+            }
+            Err(e) => {
+                tracing::debug!("reqwest failed for {}: {}", url, e);
+            }
+        }
 
-    let results = futures::future::join_all(tasks)
-        .await
-        .into_iter()
-        .map(|result| match result {
-            Ok(Ok(markdown)) => markdown,
-            Ok(Err(e)) => e.to_string(),
-            Err(e) => e.to_string(),
-        })
-        .collect();
+        // Initialize browser if not already done
+        if browser.is_none() {
+            tracing::info!("Initializing browser for fallback fetching");
+            match headless_chrome::Browser::new(headless_chrome::LaunchOptions {
+                headless: true,
+                sandbox: false,
+                devtools: false,
+                enable_gpu: false,
+                enable_logging: false,
+                path: Some(PathBuf::from("/bin/chrome-headless-shell")),
+                args: vec![
+                    &std::ffi::OsString::from("--disable-setuid-sandbox"),
+                    &std::ffi::OsString::from("--disable-dev-shm-usage"),
+                    &std::ffi::OsString::from("--disable-software-rasterizer"),
+                    &std::ffi::OsString::from("--single-process"),
+                    &std::ffi::OsString::from("--no-zygote"),
+                ],
+                ..Default::default()
+            }) {
+                Ok(b) => browser = Some(b),
+                Err(e) => {
+                    tracing::error!("Failed to initialize browser: {}", e);
+                    results.push(format!(
+                        "Error fetching {}: Browser initialization failed: {}",
+                        url, e
+                    ));
+                    continue;
+                }
+            }
+        }
+
+        // Fallback to browser
+        if let Some(ref browser_instance) = browser {
+            let url_clone = url.clone();
+            let browser_clone = browser_instance.clone();
+
+            match tokio::task::spawn_blocking(move || {
+                fetch_with_browser(&browser_clone, &url_clone)
+            })
+            .await
+            {
+                Ok(Ok(content)) => results.push(content),
+                Ok(Err(e)) => {
+                    tracing::error!("Browser fetch failed for {}: {}", url, e);
+                    results.push(format!("Error fetching {}: {}", url, e));
+                }
+                Err(e) => {
+                    tracing::error!("Task spawn failed for {}: {}", url, e);
+                    results.push(format!("Error spawning task for {}: {}", url, e));
+                }
+            }
+        }
+    }
 
     Ok(results)
 }
