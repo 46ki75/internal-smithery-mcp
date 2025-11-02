@@ -48,8 +48,10 @@ impl Counter {
         }
     }
 
-    /// Searches the web using a natural language query.
-    /// This method is highly recommended for finding web pages with greater accuracy.
+    /// Searches the web using a natural-language query.
+    /// This method is recommended for finding web pages with higher relevance.
+    /// For technical topics, queries in English often produce broader and
+    /// more accurate results (unless the topic is specific to a particular language or region).
     #[rmcp::tool(annotations(
         title = "Search web pages.",
         read_only_hint = true,
