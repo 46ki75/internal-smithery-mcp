@@ -80,11 +80,8 @@ impl<'a> FlexibleWaiter<'a> {
     }
 }
 
-static BROWSER: tokio::sync::OnceCell<std::sync::Arc<headless_chrome::Browser>> =
-    tokio::sync::OnceCell::const_new();
-
 fn fetch_with_browser(
-    browser: &std::sync::Arc<headless_chrome::Browser>,
+    browser: &headless_chrome::Browser,
     url: String,
 ) -> Result<String, Box<dyn std::error::Error + Send>> {
     let tab = browser.new_tab()?;
@@ -107,33 +104,22 @@ fn fetch_with_browser(
 }
 
 pub async fn fetch(urls: Vec<String>) -> Result<Vec<String>, Box<dyn std::error::Error + Send>> {
-    let maybe_browser: Result<
-        &std::sync::Arc<headless_chrome::Browser>,
-        Box<dyn std::error::Error + Send>,
-    > = BROWSER
-        .get_or_try_init(|| async {
-            let browser = headless_chrome::Browser::new(headless_chrome::LaunchOptions {
-                headless: true,
-                sandbox: false,
-                devtools: false,
-                enable_gpu: false,
-                enable_logging: false,
-                path: Some(PathBuf::from("/bin/chrome-headless-shell")),
-                args: vec![
-                    &std::ffi::OsString::from("--disable-setuid-sandbox"),
-                    &std::ffi::OsString::from("--disable-dev-shm-usage"),
-                    &std::ffi::OsString::from("--disable-software-rasterizer"),
-                    &std::ffi::OsString::from("--single-process"),
-                    &std::ffi::OsString::from("--no-zygote"),
-                ],
-                ..Default::default()
-            })?;
-
-            Ok(std::sync::Arc::new(browser))
-        })
-        .await;
-
-    let browser = maybe_browser?;
+    let browser = headless_chrome::Browser::new(headless_chrome::LaunchOptions {
+        headless: true,
+        sandbox: false,
+        devtools: false,
+        enable_gpu: false,
+        enable_logging: false,
+        path: Some(PathBuf::from("/bin/chrome-headless-shell")),
+        args: vec![
+            &std::ffi::OsString::from("--disable-setuid-sandbox"),
+            &std::ffi::OsString::from("--disable-dev-shm-usage"),
+            &std::ffi::OsString::from("--disable-software-rasterizer"),
+            &std::ffi::OsString::from("--single-process"),
+            &std::ffi::OsString::from("--no-zygote"),
+        ],
+        ..Default::default()
+    })?;
 
     let tasks: Vec<_> = urls
         .into_iter()
