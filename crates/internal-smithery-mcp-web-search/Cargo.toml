@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 axum = "0.8.6"
-fast_html2md = "0.0.48"
+fast_html2md = "0.0.51"
 futures = "0.3.31"
 headless_chrome = "1.0.18"
 reqwest = { version = "0.12.24", default-features = false, features = [
@@ -15,7 +15,7 @@ reqwest = { version = "0.12.24", default-features = false, features = [
     "brotli",
     "charset",
 ] }
-rmcp = { version = "0.8.3", features = [
+rmcp = { version = "0.11.0", features = [
     "transport-io",
     "transport-streamable-http-server",
     "transport-worker",
